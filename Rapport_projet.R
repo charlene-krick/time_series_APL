@@ -1,0 +1,320 @@
+library(zoo)
+library(timeDate)
+library(forecast)
+library(xts)
+library(dygraphs)
+
+install.packages("quantmod")
+library(quantmod)
+getSymbols("AAPL")
+head(AAPL,n=3)
+
+str(AAPL)
+nrow(AAPL)
+summary(AAPL)
+plot(AAPL$AAPL.Close,pch=20)
+
+#le jeu de données que nous allons analyser est Apple.close
+
+#Pour créer un nouveau tableau de données contenant uniquement les dates et la colonne AAPL.Close
+#Ceci sélectionnera la colonne AAPL.Close de votre objet xts. 
+#AAPL_Close <- AAPL[, "AAPL.Close"]
+#head(AAPL_Close)
+#plot(AAPL_Close)
+
+
+#Cette commande crée un data.frame nommé AAPL_Close_df avec deux colonnes : Date et AAPL_Close, où Date contient les indices de date de votre objet xts (les dates de chaque observation) et AAPL_Close contient les valeurs de la colonne AAPL.Close.
+AAPL_Close_df <- data.frame(Date = index(AAPL), AAPL_Close = AAPL[, "AAPL.Close"])
+names(AAPL_Close_df)<-c("Date","AAPL_Close")
+head(AAPL_Close_df)
+#plot(AAPL_Close_df$Date, AAPL_Close_df$AAPL_Close,type='b',pch=20)
+
+
+# Plot sans l'axe des x
+plot(AAPL_Close_df$Date, AAPL_Close_df$AAPL_Close, type='l',col='blue', pch=20, xaxt='n', ylab="AAPL Close", xlab="Date")
+# Calcul des limites pour l'axe des x
+range_dates <- range(AAPL_Close_df$Date)
+# Ajout de l'axe des x avec des graduations annuelles
+axis.Date(1, at=seq(from=range_dates[1], to=range_dates[2], by="year"), format="%Y")
+
+
+# Convertir AAPL_Close_df en une série temporelle xts
+AAPL_xts <- xts(AAPL_Close_df$AAPL_Close, order.by=as.Date(AAPL_Close_df$Date))
+# Tracer la série temporelle
+plot(AAPL_xts, type='l', main="Prix de l'action Apple à la clôture des marchés au cours du temps", xlab="Date", ylab="Prix de clôture (en $)", col="blue")
+
+
+
+
+# Calculer la moyenne et l'écart-type
+mean_AAPL <- mean(AAPL_xts)
+sd_AAPL <- sd(AAPL_xts)
+summary(AAPL_Close_df)
+# Afficher les valeurs
+print(paste("La moyenne est :", mean_AAPL))
+print(paste("L'écart-type est :", sd_AAPL))
+# Créer un boxplot
+boxplot(AAPL_xts, main="Boxplot des données", ylab="Prix de l'action à la clôture (en $)")
+# Créer un histogramme
+hist(AAPL_xts, breaks=50, main="Histogramme des données", xlab="Prix de l'action à la clôture (en $)", col="blue")
+# Calculer la moyenne mensuelle
+AAPL_monthly_avg <- apply.monthly(AAPL_xts, mean)
+# Tracer la moyenne mensuelle
+plot(AAPL_monthly_avg, type='l', main="Moyenne mensuelle de l'action d'Apple", xlab="Date", ylab="Prix moyen de l'action (en $)", col="red")
+# Calculer la moyenne annuelle
+AAPL_annual_avg <- apply.yearly(AAPL_xts, mean)
+# Tracer la moyenne annuelle
+plot(AAPL_annual_avg, type='l', main="Moyenne annuelle de l'action d'Apple", xlab="Date", ylab="Prix moyen de l'action (en $)", col="red")
+
+# Calculer et tracer l'autocorrélogramme
+acf(AAPL_xts, main="Autocorrélogramme des données de l'action d'Apple")
+
+
+
+##decomposition avec decompose()
+##frequence mensuelle =12
+
+# La fréquence dépend de la périodicité des données (e.g., 12 pour mensuelle, 4 pour trimestrielle)
+AAPL_ts <- ts(AAPL_xts, frequency=12)
+# Décomposition de la série temporelle
+AAPL_decomposed <- decompose(AAPL_ts)
+# Afficher les composantes de la décomposition
+plot(AAPL_decomposed)
+
+
+##decomposition avec stl()
+AAPL_ts <- ts(AAPL_Close_df$AAPL_Close, frequency=12)
+##decomposition avec fonction stl (pas de saisonnalité claire)
+# La fonction stl nécessite un objet ts avec saisonnalité. 
+# 's.window' est le paramètre pour la saisonnalité : "periodic" assume une saisonnalité stable au fil du temps.
+AAPL_stl <- stl(AAPL_ts, s.window="periodic")
+# Afficher les composantes de la décomposition STL
+plot(AAPL_stl)
+
+
+
+###estimation de la tendance
+
+##estimation par moyenne mobile
+
+# Charger la librairie nécessaire si ce n'est pas déjà fait
+library(stats)
+# Définir la taille de la fenêtre pour la moyenne mobile, par exemple 30 jours
+window_size <- 30
+# Créer un vecteur de poids pour la moyenne mobile, ici nous utilisons une moyenne mobile simple
+weights <- rep(1/window_size, window_size)
+# Calculer la moyenne mobile en utilisant la fonction filter
+# Utilisation de 'na.pad = FALSE' pour éviter l'ajout de NA aux débuts et fins de la série
+trend_ma <- filter(AAPL_xts, weights, sides=2, circular = TRUE)
+# Configurer l'espace de tracé pour deux graphiques (1 ligne, 2 colonnes)
+par(mfrow=c(2, 1))
+# Tracer la série temporelle originale
+plot(AAPL_xts, type='l', main="Cours de l'action Apple à la clôture des marchés", xlab="Date", ylab="Prix de l'action à la clôture (en $)", col="blue")
+# Tracer la tendance de la moyenne mobile sur un graphique distinct avec la même échelle de temps
+plot(index(AAPL_xts), trend_ma, type='l', main="Estimation de la tendance par Moyenne Mobile", xlab="Date", ylab="Moyenne mobile (en $)", col="red", xlim=range(index(AAPL_xts)))
+# Réinitialiser les paramètres graphiques par défaut
+par(mfrow=c(1, 1))
+
+# Tracer la série après suppression de la tendance estimée par moyenne mobile
+detrended_series_filter <- AAPL_xts - trend_ma
+plot(index(AAPL_xts), detrended_series_filter, type = 'l', main = "Série après suppression de la tendance estimée", xlab = "Date", ylab = "Prix (en $)", col = "darkgreen")
+
+
+
+
+
+###estimation de la tendance
+##estimation par regression linéaire
+
+# Créer une variable temps pour la régression linéaire
+time <- 1:length(AAPL_xts)
+# Ajuster un modèle de régression linéaire
+fit <- lm(AAPL_xts ~ time + I(time^2)+ I(time^3)+ I(time^4))
+# Calculer la tendance de la régression linéaire
+trend_lm <- fitted(fit)
+# Tracer la série temporelle originale
+plot(index(AAPL_xts), AAPL_xts, type='l', main="Cours de l'action Apple avec Tendance estimée par Régression Linéaire", xlab="Date", ylab="Prix à la clôture (en $)", col="blue")
+# Superposer la ligne de tendance de la régression linéaire
+lines(index(AAPL_xts), trend_lm, col="red", lwd=2)
+# Ajouter une légende
+legend("topleft", legend=c("Série Originale", "Estimation de la tendance par Régression Linéaire"), col=c("blue", "red"), lty=1, lwd=2)
+
+# Tracer la série après suppression de la tendance estimée par regression lineaire
+detrended_series_lm <- AAPL_xts - trend_lm
+plot(index(AAPL_xts), detrended_series_lm, type = 'l', main = "Série après suppression de la tendance estimée", xlab = "Date", ylab = "Prix (en $)", col = "darkgreen")
+
+
+
+
+# Utiliser summary() pour obtenir un résumé du modèle de régression linéaire
+summary_fit <- summary(fit)
+# Afficher le résumé dans la console
+print(summary_fit)
+
+
+
+
+
+
+
+
+
+
+
+###estimation de la tendance
+##estimation par noyau gaussien
+
+# Chargement de la bibliothèque nécessaire si ce n'est pas déjà fait
+library(stats)
+# Définir la variable de temps et la série des prix de clôture
+time <- 1:length(AAPL_xts)
+prices <- coredata(AAPL_xts)
+# Utiliser ksmooth pour estimer la tendance par noyau gaussien
+bandwidth <- 250  # Choix d'une fenêtre h. Ajustez ce paramètre en fonction de vos données.
+trend_gaussian <- ksmooth(time, prices, kernel = "normal", bandwidth = bandwidth)$y
+# Tracer la série temporelle originale et la tendance estimée
+plot(index(AAPL_xts), prices, type = 'l', main = "Cours de l'action Apple avec Tendance estimée par Noyau Gaussien", xlab = "Date", ylab = "Prix de l'action à la clôture (en $)", col = "blue")
+lines(index(AAPL_xts), trend_gaussian, col = "red", lwd = 2)
+# Ajouter une légende
+legend("topleft", legend = c("Série Originale", "Estimation de la tendance par Noyau Gaussien"), col = c("blue", "red"), lty = 1, lwd = 2)
+# Tracer la série après suppression de la tendance par noyau estimée
+detrended_series_gaussian <- prices - trend_gaussian
+plot(index(AAPL_xts), detrended_series_gaussian, type = 'l', main = "Série après suppression de la tendance estimée", xlab = "Date", ylab = "Prix (en $)", col = "darkgreen")
+
+
+
+
+###estimation tendance
+##estimation par polynomes locaux
+# Utilisation de loess pour estimer la tendance par polynômes locaux
+loess_fit <- loess(AAPL_xts ~ time, span = 0.75)  # Ajustez span selon vos données
+# Prédire la tendance à l'aide du modèle loess
+trend_loess <- predict(loess_fit)
+# Tracer la série temporelle originale et la tendance estimée
+plot(index(AAPL_xts), AAPL_xts, type = 'l', main = "Cours de l'action Apple avec Tendance estimée par Polynômes Locaux", xlab = "Date", ylab = "Prix de l'action à la clôture (en $)", col = "blue")
+lines(index(AAPL_xts), trend_loess, col = "red", lwd = 2)
+legend("topleft", legend = c("Série Originale", "Estimation de la tendance par Polynômes Locaux"), col = c("blue", "red"), lty = 1, lwd = 2)
+# Tracer la série après suppression de la tendance estimée par polynômes locaux
+detrended_series_loess <- AAPL_xts - trend_loess
+plot(index(AAPL_xts), detrended_series_loess, type = 'l', main = "Série après suppression de la tendance estimée", xlab = "Date", ylab = "Prix (en $)", col = "darkgreen")
+
+
+
+
+
+
+###estimation tendance
+##estimation par projection sur base de focntion splines polynomiales
+# Chargement de la librairie mgcv si ce n'est pas déjà fait
+library(mgcv)
+# Définir une grille de temps en fonction de la longueur de la série temporelle
+time <- 1:length(AAPL_xts)
+# Appliquer la régression avec des splines à la série temporelle
+gam_fit <- gam(AAPL_xts ~ s(time, bs = "cs"), method = "REML")
+trend_spline<-fitted(gam_fit)
+# Tracer la série temporelle originale
+plot(index(AAPL_xts), AAPL_xts, type = 'l', main = "Prix de l'action Apple avec Tendance estimée par méthode Spline polynomiale", xlab = "Date", ylab = "Prix à la clôture (en $)", col = "blue")
+# Ajouter la tendance estimée par splines
+lines(index(AAPL_xts), fitted(gam_fit), col = "red", lwd = 2)
+# Tracer la série temporelle après soustraction de la tendance estimée
+detrended_series_spline <- AAPL_xts - fitted(gam_fit)
+plot(index(AAPL_xts), detrended_series_spline, type = 'l', main = "Prix de l'action Apple après suppression de la tendance estimée", xlab = "Date", ylab = "Prix (en $)", col = "darkgreen")
+
+
+# Pour obtenir un résumé du modèle qui inclura des informations sur les splines
+summary(gam_fit)
+
+# Pour obtenir des informations spécifiques sur la base de splines utilisée
+gam_fit$sp
+
+plot(gam_fit, se = TRUE, shade = TRUE) # 'se' pour afficher l'intervalle de confiance et 'shade' pour ombrer cet intervalle.
+
+
+
+
+###comparaison des méthodes d'estimation
+
+
+# Supposons que vous avez déjà les tendances calculées et stockées dans ces variables:
+# trend_ma pour Moyenne Mobile
+# trend_lm pour Régression Linéaire
+# trend_gaussian pour Noyau Gaussien
+# trend_loess pour Polynômes Locaux
+# trend_spline pour Splines
+# Créer un graphique avec la série originale et toutes les tendances estimées
+plot(index(AAPL_xts), AAPL_xts, type = 'l', main = "Comparaison des méthodes d'estimations de tendance", xlab = "Date", ylab = "Prix de l'action (en $)", col = "blue", lwd = 1)
+lines(index(AAPL_xts), trend_ma, col = "green", lwd = 1)
+lines(index(AAPL_xts), trend_lm, col = "red", lwd = 1)
+lines(index(AAPL_xts), trend_gaussian, col = "purple", lwd = 1)
+lines(index(AAPL_xts), trend_loess, col = "orange", lwd = 1)
+lines(index(AAPL_xts), trend_spline, col = "brown", lwd = 1)
+
+# Ajouter une légende pour identifier chaque méthode
+legend("topleft", legend = c("Série Originale", "Moyenne Mobile", "Régression Linéaire", "Noyau Gaussien", "Polynômes Locaux", "Splines"), col = c("blue", "green", "red", "purple", "orange", "brown"), lty = 1, lwd = 1)
+
+
+
+
+# Calculer les séries détrendues
+detrended_ma <- AAPL_xts - trend_ma
+detrended_lr <- AAPL_xts - trend_lm
+detrended_gaussian <- prices - trend_gaussian
+detrended_local_poly <- AAPL_xts - trend_loess
+detrended_splines <- AAPL_xts - fitted(gam_fit)
+
+# Calculer la moyenne de chaque série détrendue
+mean_detrended_ma <- mean(detrended_ma, na.rm = TRUE)
+mean_detrended_lr <- mean(detrended_lr, na.rm = TRUE)
+mean_detrended_gaussian <- mean(detrended_gaussian, na.rm = TRUE)
+mean_detrended_local_poly <- mean(detrended_local_poly, na.rm = TRUE)
+mean_detrended_splines <- mean(detrended_splines, na.rm = TRUE)
+
+# Créer un vecteur nommé pour stocker les moyennes pour une comparaison plus facile
+means_comparison <- c(MA = mean_detrended_ma, 
+                      LR = mean_detrended_lr, 
+                      Gaussian = mean_detrended_gaussian, 
+                      Local_Poly = mean_detrended_local_poly, 
+                      Splines = mean_detrended_splines)
+
+# Trouver la méthode avec la moyenne la plus proche de zéro
+best_method <- names(which.min(abs(means_comparison)))
+
+# Afficher les moyennes et la meilleure méthode
+print(means_comparison)
+print(paste("La meilleure méthode d'estimation est:", best_method))
+
+
+
+
+
+
+
+
+
+
+####ESTIMATION DE LA SAISONNALITE
+
+##SAISONNALITE PAR MOYENNE MOBILE
+# Determine the frequency of the time series
+frequency <- frequency(AAPL_xts)
+# Calculate the centered moving average for seasonality estimation
+seasonal_estimate <- filter(AAPL_xts, rep(1/frequency, frequency), sides=2)
+# Plot the original series and the seasonal estimate
+plot(AAPL_xts, main="Série temporelle et l'estimation de la saisonnalité par moyenne mobile", xlab="Time", ylab="Value", col="blue")
+lines(seasonal_estimate, col="red", lwd=2)
+legend("topleft", legend=c("Original Series", "Seasonal Estimate"), col=c("blue", "red"), lwd=2)
+plot(seasonal_estimate,main="Estimation de la saisonnalité par moyenne mobile",xlab="Time", ylab="Value", col="red" )
+
+
+seasonal_estimate <- filter(detrended_lr, rep(1/frequency, frequency), sides=2)
+# Plot the original series and the seasonal estimate
+plot(detrended_lr, main="Série temporelle et l'estimation de la saisonnalité par moyenne mobile", xlab="Time", ylab="Value", col="blue")
+lines(seasonal_estimate, col="red", lwd=2)
+legend("topleft", legend=c("Original Series", "Seasonal Estimate"), col=c("blue", "red"), lwd=2)
+plot(seasonal_estimate,main="Estimation de la saisonnalité sur la série corrigée de sa tendance",xlab="Time", ylab="Value", col="red" )
+
+
+
+
+
+
